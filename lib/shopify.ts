@@ -5,7 +5,8 @@ const API_VERSION = '2024-04'
 // --- OAuth ---
 
 export function buildAuthUrl(shop: string, state: string): string {
-  const scopes = 'read_orders,write_online_store_pages'
+  // write_online_store_pages grants access to toggle password_enabled on the shop (storefront password)
+  const scopes = 'write_online_store_pages'
   const redirectUri = `${process.env.SHOPIFY_APP_URL}/api/auth/callback`
   const clientId = process.env.SHOPIFY_API_KEY!
   return (
