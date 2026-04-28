@@ -4,6 +4,8 @@ export type Merchant = {
   id: string
   shop_domain: string
   encrypted_access_token: string
+  encrypted_refresh_token: string | null
+  access_token_expires_at: string | null
   merchant_email: string | null
   timezone: string
   is_active: boolean

@@ -1,4 +1,6 @@
 import crypto from 'crypto'
+import { encrypt, decrypt } from '@/lib/crypto'
+import { supabase, type Merchant } from '@/lib/supabase'
 
 const API_VERSION = '2024-04'
 
@@ -14,15 +16,20 @@ export function buildAuthUrl(shop: string, state: string): string {
     `?client_id=${clientId}` +
     `&scope=${scopes}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&state=${state}` +
-    `&grant_options[]=value`
+    `&state=${state}`
   )
+}
+
+export type TokenResult = {
+  accessToken: string
+  refreshToken: string | null
+  expiresAt: Date | null
 }
 
 export async function exchangeCodeForToken(
   shop: string,
   code: string
-): Promise<string> {
+): Promise<TokenResult> {
   const res = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -34,7 +41,58 @@ export async function exchangeCodeForToken(
   })
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`)
   const data = await res.json()
-  return data.access_token as string
+  return {
+    accessToken: data.access_token as string,
+    refreshToken: data.refresh_token ?? null,
+    expiresAt: data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null,
+  }
+}
+
+export async function refreshAccessToken(
+  shop: string,
+  refreshToken: string
+): Promise<TokenResult> {
+  const res = await fetch(`https://${shop}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.SHOPIFY_API_KEY,
+      client_secret: process.env.SHOPIFY_API_SECRET,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }),
+  })
+  if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`)
+  const data = await res.json()
+  return {
+    accessToken: data.access_token as string,
+    refreshToken: data.refresh_token ?? refreshToken,
+    expiresAt: data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null,
+  }
+}
+
+// Returns a valid access token, refreshing if it expires within the next hour.
+export async function getValidAccessToken(merchant: Merchant): Promise<string> {
+  const accessToken = decrypt(merchant.encrypted_access_token)
+
+  if (!merchant.access_token_expires_at) return accessToken
+
+  const expiresAt = new Date(merchant.access_token_expires_at)
+  const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000)
+  if (expiresAt > oneHourFromNow) return accessToken
+
+  if (!merchant.encrypted_refresh_token) throw new Error('Token expired and no refresh token available')
+
+  const storedRefresh = decrypt(merchant.encrypted_refresh_token)
+  const result = await refreshAccessToken(merchant.shop_domain, storedRefresh)
+
+  await supabase.from('merchants').update({
+    encrypted_access_token: encrypt(result.accessToken),
+    encrypted_refresh_token: result.refreshToken ? encrypt(result.refreshToken) : merchant.encrypted_refresh_token,
+    access_token_expires_at: result.expiresAt?.toISOString() ?? null,
+  }).eq('id', merchant.id)
+
+  return result.accessToken
 }
 
 // --- HMAC verification ---

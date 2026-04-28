@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { decrypt } from '@/lib/crypto'
-import { setStoreOpen } from '@/lib/shopify'
+import { getValidAccessToken, setStoreOpen } from '@/lib/shopify'
 import { getSession } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
@@ -21,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   if (!merchant) return Response.json({ error: 'Merchant not found' }, { status: 404 })
 
-  const accessToken = decrypt(merchant.encrypted_access_token)
+  const accessToken = await getValidAccessToken(merchant)
   await setStoreOpen(session.shop, accessToken, desiredState === 'open')
 
   await supabase

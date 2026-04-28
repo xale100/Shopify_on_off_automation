@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
   const shop = searchParams.get('shop') ?? ''
   const code = searchParams.get('code') ?? ''
   const state = searchParams.get('state') ?? ''
-  const hmac = searchParams.get('hmac') ?? ''
 
   // CSRF check
   const storedState = request.cookies.get('oauth_state')?.value
@@ -24,9 +23,8 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: 'HMAC verification failed' }, { status: 403 })
   }
 
-  // Exchange code for token
-  const accessToken = await exchangeCodeForToken(shop, code)
-  const encryptedToken = encrypt(accessToken)
+  // Exchange code for token (supports expiring offline tokens)
+  const { accessToken, refreshToken, expiresAt } = await exchangeCodeForToken(shop, code)
   const email = await getShopEmail(shop, accessToken)
 
   // Upsert merchant record
@@ -35,7 +33,9 @@ export async function GET(request: NextRequest) {
     .upsert(
       {
         shop_domain: shop,
-        encrypted_access_token: encryptedToken,
+        encrypted_access_token: encrypt(accessToken),
+        encrypted_refresh_token: refreshToken ? encrypt(refreshToken) : null,
+        access_token_expires_at: expiresAt?.toISOString() ?? null,
         merchant_email: email,
         is_active: true,
       },

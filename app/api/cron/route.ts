@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { supabase, type Merchant } from '@/lib/supabase'
-import { decrypt } from '@/lib/crypto'
-import { setStoreOpen } from '@/lib/shopify'
+import { getValidAccessToken, setStoreOpen } from '@/lib/shopify'
 import { shouldBeOpen } from '@/lib/scheduler'
 import { sendFailureAlert } from '@/lib/email'
 
@@ -39,7 +38,7 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      const accessToken = decrypt(merchant.encrypted_access_token)
+      const accessToken = await getValidAccessToken(merchant)
       await setStoreOpen(merchant.shop_domain, accessToken, desiredState === 'open')
 
       await supabase
