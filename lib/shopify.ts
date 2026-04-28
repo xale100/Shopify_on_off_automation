@@ -171,7 +171,7 @@ export async function createRecurringCharge(
           name: 'Shopify On/Off Automation',
           price: '4.99',
           return_url: returnUrl,
-          test: process.env.NODE_ENV !== 'production',
+          test: process.env.SHOPIFY_BILLING_TEST === 'true',
           trial_days: 0,
         },
       }),
