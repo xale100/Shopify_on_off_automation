@@ -65,17 +65,33 @@ const TIMEZONES = [
   'Pacific/Auckland',
 ]
 
-async function getToken(): Promise<string> {
-  if (typeof window === 'undefined' || !window.shopify) return ''
-  try {
-    return await (window.shopify as { idToken: () => Promise<string> }).idToken()
-  } catch {
-    return ''
-  }
+async function waitForShopify(ms = 4000): Promise<boolean> {
+  const deadline = Date.now() + ms
+  return new Promise((resolve) => {
+    ;(function check() {
+      const s = window.shopify as { idToken?: () => Promise<string> } | undefined
+      if (typeof s?.idToken === 'function') return resolve(true)
+      if (Date.now() >= deadline) return resolve(false)
+      setTimeout(check, 50)
+    })()
+  })
 }
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const token = await getToken()
+async function getToken(fallback: string): Promise<string> {
+  if (typeof window === 'undefined') return fallback
+  const ready = await waitForShopify()
+  if (ready) {
+    try {
+      return await (window.shopify as { idToken: () => Promise<string> }).idToken()
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+async function apiFetch(path: string, initialToken: string, options: RequestInit = {}) {
+  const token = await getToken(initialToken)
   return fetch(path, {
     ...options,
     headers: {
@@ -86,7 +102,7 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   })
 }
 
-export function EmbeddedApp({ shop, host }: { shop: string; host: string }) {
+export function EmbeddedApp({ shop, host, initialToken }: { shop: string; host: string; initialToken: string }) {
   const [storeState, setStoreState] = useState<StoreState | null>(null)
   const [lastToggle, setLastToggle] = useState<string | null>(null)
   const [windows, setWindows] = useState<ScheduleWindow[]>([])
@@ -98,7 +114,7 @@ export function EmbeddedApp({ shop, host }: { shop: string; host: string }) {
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/embedded/status')
+      const res = await apiFetch('/api/embedded/status', initialToken)
       if (!res.ok) throw new Error('Failed to load status')
       const data = await res.json()
       setStoreState(data.state)
@@ -110,7 +126,7 @@ export function EmbeddedApp({ shop, host }: { shop: string; host: string }) {
 
   const loadSchedule = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/embedded/schedule')
+      const res = await apiFetch('/api/embedded/schedule', initialToken)
       if (!res.ok) throw new Error('Failed to load schedule')
       const data = await res.json()
       setWindows(data.windows ?? [])
@@ -127,7 +143,7 @@ export function EmbeddedApp({ shop, host }: { shop: string; host: string }) {
   async function handleToggle(desired: StoreState) {
     setToggling(true)
     try {
-      const res = await apiFetch('/api/embedded/toggle', {
+      const res = await apiFetch('/api/embedded/toggle', initialToken, {
         method: 'POST',
         body: JSON.stringify({ desiredState: desired }),
       })
@@ -146,7 +162,7 @@ export function EmbeddedApp({ shop, host }: { shop: string; host: string }) {
   async function handleSaveSchedule() {
     setSaving(true)
     try {
-      const res = await apiFetch('/api/embedded/schedule', {
+      const res = await apiFetch('/api/embedded/schedule', initialToken, {
         method: 'PUT',
         body: JSON.stringify({ windows, timezone }),
       })

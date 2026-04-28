@@ -12,7 +12,7 @@ export default function EmbeddedLayout({ children }: { children: React.ReactNode
       <Script
         src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
         data-api-key={process.env.SHOPIFY_API_KEY}
-        strategy="beforeInteractive"
+        strategy="afterInteractive"
       />
       {children}
     </>
