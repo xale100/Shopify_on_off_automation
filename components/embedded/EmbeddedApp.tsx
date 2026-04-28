@@ -65,48 +65,41 @@ const TIMEZONES = [
   'Pacific/Auckland',
 ]
 
-async function waitForShopify(ms = 4000): Promise<boolean> {
-  const deadline = Date.now() + ms
-  return new Promise((resolve) => {
-    ;(function check() {
+// Poll until window.shopify.idToken is available (App Bridge CDN script loaded)
+function useAppBridgeReady(): boolean {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const id = setInterval(() => {
       const s = window.shopify as { idToken?: () => Promise<string> } | undefined
-      if (typeof s?.idToken === 'function') return resolve(true)
-      if (Date.now() >= deadline) return resolve(false)
-      setTimeout(check, 50)
-    })()
-  })
+      if (typeof s?.idToken === 'function') {
+        setReady(true)
+        clearInterval(id)
+      }
+    }, 100)
+    return () => clearInterval(id)
+  }, [])
+  return ready
 }
 
-function getUrlToken(): string {
-  return new URLSearchParams(window.location.search).get('id_token') ?? ''
+async function freshToken(): Promise<string> {
+  return (window.shopify as { idToken: () => Promise<string> }).idToken()
 }
 
-async function getToken(fallback: string): Promise<string> {
-  if (typeof window === 'undefined') return fallback
-  const ready = await waitForShopify()
-  if (ready) {
-    try {
-      return await (window.shopify as { idToken: () => Promise<string> }).idToken()
-    } catch {
-      // fall through to URL token
-    }
-  }
-  return getUrlToken() || fallback
-}
-
-async function apiFetch(path: string, initialToken: string, options: RequestInit = {}) {
-  const token = await getToken(initialToken)
+async function apiFetch(path: string, options: RequestInit = {}) {
+  const token = await freshToken()
   return fetch(path, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Authorization: `Bearer ${token}`,
       ...(options.headers as Record<string, string> | undefined),
     },
   })
 }
 
-export function EmbeddedApp({ shop, host, initialToken }: { shop: string; host: string; initialToken: string }) {
+export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken: string }) {
+  const appBridgeReady = useAppBridgeReady()
   const [storeState, setStoreState] = useState<StoreState | null>(null)
   const [lastToggle, setLastToggle] = useState<string | null>(null)
   const [windows, setWindows] = useState<ScheduleWindow[]>([])
@@ -118,7 +111,7 @@ export function EmbeddedApp({ shop, host, initialToken }: { shop: string; host: 
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/embedded/status', initialToken)
+      const res = await apiFetch('/api/embedded/status')
       if (!res.ok) throw new Error('Failed to load status')
       const data = await res.json()
       setStoreState(data.state)
@@ -130,7 +123,7 @@ export function EmbeddedApp({ shop, host, initialToken }: { shop: string; host: 
 
   const loadSchedule = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/embedded/schedule', initialToken)
+      const res = await apiFetch('/api/embedded/schedule')
       if (!res.ok) throw new Error('Failed to load schedule')
       const data = await res.json()
       setWindows(data.windows ?? [])
@@ -140,14 +133,16 @@ export function EmbeddedApp({ shop, host, initialToken }: { shop: string; host: 
     }
   }, [])
 
+  // Only fire API calls once App Bridge is confirmed ready — never use stale URL token
   useEffect(() => {
+    if (!appBridgeReady) return
     Promise.all([loadStatus(), loadSchedule()]).finally(() => setLoading(false))
-  }, [loadStatus, loadSchedule])
+  }, [appBridgeReady, loadStatus, loadSchedule])
 
   async function handleToggle(desired: StoreState) {
     setToggling(true)
     try {
-      const res = await apiFetch('/api/embedded/toggle', initialToken, {
+      const res = await apiFetch('/api/embedded/toggle', {
         method: 'POST',
         body: JSON.stringify({ desiredState: desired }),
       })
@@ -166,7 +161,7 @@ export function EmbeddedApp({ shop, host, initialToken }: { shop: string; host: 
   async function handleSaveSchedule() {
     setSaving(true)
     try {
-      const res = await apiFetch('/api/embedded/schedule', initialToken, {
+      const res = await apiFetch('/api/embedded/schedule', {
         method: 'PUT',
         body: JSON.stringify({ windows, timezone }),
       })
@@ -203,7 +198,8 @@ export function EmbeddedApp({ shop, host, initialToken }: { shop: string; host: 
     setWindows((prev) => prev.filter((_, i) => i !== index))
   }
 
-  if (loading) {
+  // Show spinner while waiting for App Bridge or data
+  if (!appBridgeReady || loading) {
     return (
       <AppProvider i18n={en}>
         <Frame>
