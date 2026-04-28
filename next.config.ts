@@ -1,15 +1,17 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  // Allow Shopify admin iframe embedding
   async headers() {
     return [
       {
-        source: '/(.*)',
+        // Allow Shopify admin to iframe the embedded route.
+        // frame-ancestors is the CSP successor to X-Frame-Options and is
+        // required by Shopify's embedded app security model.
+        source: '/embedded/:path*',
         headers: [
           {
-            key: 'X-Frame-Options',
-            value: 'ALLOWALL',
+            key: 'Content-Security-Policy',
+            value: `frame-ancestors https://*.myshopify.com https://admin.shopify.com`,
           },
         ],
       },

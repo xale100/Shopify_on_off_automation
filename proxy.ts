@@ -5,24 +5,31 @@ import { sessionOptions, type SessionData } from '@/lib/session'
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (!pathname.startsWith('/dashboard')) {
+  // Embedded route: require shop + host query params (App Bridge handles auth)
+  if (pathname.startsWith('/embedded')) {
+    const shop = request.nextUrl.searchParams.get('shop')
+    const host = request.nextUrl.searchParams.get('host')
+    if (!shop || !host) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
     return NextResponse.next()
   }
 
-  // iron-session needs a Request/Response pair in edge-compatible environments.
-  // In Next.js proxy we use the request directly.
-  const response = NextResponse.next()
-  const session = await getIronSession<SessionData>(request, response, sessionOptions)
-
-  if (!session.shop) {
-    const loginUrl = new URL('/', request.url)
-    loginUrl.searchParams.set('redirect', 'dashboard')
-    return NextResponse.redirect(loginUrl)
+  // Dashboard route: require iron-session cookie
+  if (pathname.startsWith('/dashboard')) {
+    const response = NextResponse.next()
+    const session = await getIronSession<SessionData>(request, response, sessionOptions)
+    if (!session.shop) {
+      const loginUrl = new URL('/', request.url)
+      loginUrl.searchParams.set('redirect', 'dashboard')
+      return NextResponse.redirect(loginUrl)
+    }
+    return response
   }
 
-  return response
+  return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/dashboard/:path*', '/embedded/:path*'],
 }
