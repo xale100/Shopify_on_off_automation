@@ -49,20 +49,28 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: 'Database error' }, { status: 500 })
   }
 
+  // Set iron-session so the external /dashboard also works
+  const session = await getSession()
+  session.shop = shop
+  await session.save()
+
   // Check if billing already active
   if (merchant.billing_charge_id) {
-    const session = await getSession()
-    session.shop = shop
-    await session.save()
-    const response = NextResponse.redirect(new URL('/dashboard', request.url))
+    const response = NextResponse.redirect(new URL('/embedded', request.url))
     response.cookies.delete('oauth_state')
     return response
   }
 
-  // Create billing charge and redirect to Shopify for approval
-  const { confirmationUrl } = await createRecurringCharge(shop, accessToken)
-
-  const response = NextResponse.redirect(confirmationUrl)
-  response.cookies.delete('oauth_state')
-  return response
+  // Attempt to create billing charge; if it fails (e.g. custom/dev app), go straight to embedded
+  try {
+    const { confirmationUrl } = await createRecurringCharge(shop, accessToken)
+    const response = NextResponse.redirect(confirmationUrl)
+    response.cookies.delete('oauth_state')
+    return response
+  } catch (err) {
+    console.warn('Billing charge creation failed, skipping billing:', err instanceof Error ? err.message : err)
+    const response = NextResponse.redirect(new URL('/embedded', request.url))
+    response.cookies.delete('oauth_state')
+    return response
+  }
 }
