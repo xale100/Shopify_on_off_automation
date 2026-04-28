@@ -77,6 +77,10 @@ async function waitForShopify(ms = 4000): Promise<boolean> {
   })
 }
 
+function getUrlToken(): string {
+  return new URLSearchParams(window.location.search).get('id_token') ?? ''
+}
+
 async function getToken(fallback: string): Promise<string> {
   if (typeof window === 'undefined') return fallback
   const ready = await waitForShopify()
@@ -84,10 +88,10 @@ async function getToken(fallback: string): Promise<string> {
     try {
       return await (window.shopify as { idToken: () => Promise<string> }).idToken()
     } catch {
-      return fallback
+      // fall through to URL token
     }
   }
-  return fallback
+  return getUrlToken() || fallback
 }
 
 async function apiFetch(path: string, initialToken: string, options: RequestInit = {}) {
