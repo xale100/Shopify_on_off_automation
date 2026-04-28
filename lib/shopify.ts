@@ -37,6 +37,7 @@ export async function exchangeCodeForToken(
       client_id: process.env.SHOPIFY_API_KEY,
       client_secret: process.env.SHOPIFY_API_SECRET,
       code,
+      expiring: 1,
     }),
   })
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`)
