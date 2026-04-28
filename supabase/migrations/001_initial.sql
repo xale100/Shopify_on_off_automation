@@ -28,3 +28,9 @@ CREATE TABLE schedule_windows (
 
 CREATE INDEX idx_schedule_windows_merchant ON schedule_windows(merchant_id);
 CREATE INDEX idx_merchants_shop_domain ON merchants(shop_domain);
+
+-- Enable RLS on both tables.
+-- The app exclusively uses the service role key (server-side), which bypasses RLS.
+-- RLS here acts as a safety net: anon/public keys have zero access.
+ALTER TABLE merchants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE schedule_windows ENABLE ROW LEVEL SECURITY;
