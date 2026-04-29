@@ -130,25 +130,46 @@ export async function setStoreOpen(
   accessToken: string,
   open: boolean
 ): Promise<void> {
-  // password_enabled: true  → store is password-protected (closed to public)
-  // password_enabled: false → store is open
+  // Use the GraphQL onlineStorePreferencesUpdate mutation.
+  // The REST shop.json endpoint returns 406 for password_enabled in recent API versions.
+  // passwordProtection.enabled: true → store closed (password required)
+  // passwordProtection.enabled: false → store open
   const res = await fetch(
-    `https://${shop}/admin/api/${API_VERSION}/shop.json`,
+    `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
     {
-      method: 'PUT',
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
         'X-Shopify-Access-Token': accessToken,
       },
       body: JSON.stringify({
-        shop: { password_enabled: !open },
+        query: `
+          mutation onlineStorePreferencesUpdate($preferences: OnlineStorePreferencesInput!) {
+            onlineStorePreferencesUpdate(preferences: $preferences) {
+              userErrors { field message }
+              onlineStore { passwordProtection { enabled } }
+            }
+          }
+        `,
+        variables: {
+          preferences: {
+            passwordProtection: { enabled: !open },
+          },
+        },
       }),
     }
   )
+
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Shopify toggle failed (${res.status}): ${body}`)
+  }
+
+  const json = await res.json()
+  const userErrors = json.data?.onlineStorePreferencesUpdate?.userErrors ?? []
+  if (userErrors.length > 0) {
+    const msg = userErrors.map((e: { message: string }) => e.message).join(', ')
+    throw new Error(`Shopify toggle failed: ${msg}`)
   }
 }
 
