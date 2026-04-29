@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import { encrypt, decrypt } from '@/lib/crypto'
 import { supabase, type Merchant } from '@/lib/supabase'
 
-const API_VERSION = '2024-04'
+const API_VERSION = '2025-04'
 
 // --- OAuth ---
 
