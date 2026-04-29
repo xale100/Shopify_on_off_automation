@@ -130,12 +130,11 @@ export async function setStoreOpen(
   accessToken: string,
   open: boolean
 ): Promise<void> {
-  // Use the GraphQL onlineStorePreferencesUpdate mutation.
-  // The REST shop.json endpoint returns 406 for password_enabled in recent API versions.
+  // onlineStorePreferencesUpdate is currently only in the unstable channel.
   // passwordProtection.enabled: true → store closed (password required)
   // passwordProtection.enabled: false → store open
   const res = await fetch(
-    `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
+    `https://${shop}/admin/api/unstable/graphql.json`,
     {
       method: 'POST',
       headers: {
