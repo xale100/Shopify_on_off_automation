@@ -133,7 +133,7 @@ export async function setStoreOpen(
   // password_enabled: true → store closed (visitors see password page)
   // password_enabled: false → store open
   const res = await fetch(
-    `https://${shop}/admin/api/${API_VERSION}/shop.json`,
+    `https://${shop}/admin/api/2023-04/shop.json`,
     {
       method: 'PUT',
       headers: {
