@@ -138,6 +138,7 @@ export async function setStoreOpen(
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'X-Shopify-Access-Token': accessToken,
       },
       body: JSON.stringify({
