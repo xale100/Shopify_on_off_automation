@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   AppProvider,
   Page,
@@ -37,57 +37,41 @@ type ScheduleWindow = {
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 const TIMEZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Rome',
-  'Europe/Madrid',
-  'Europe/Amsterdam',
-  'Europe/Warsaw',
-  'Europe/Istanbul',
-  'Asia/Dubai',
-  'Asia/Karachi',
-  'Asia/Kolkata',
-  'Asia/Dhaka',
-  'Asia/Bangkok',
-  'Asia/Singapore',
-  'Asia/Tokyo',
-  'Asia/Seoul',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Rome',
+  'Europe/Madrid', 'Europe/Amsterdam', 'Europe/Warsaw', 'Europe/Istanbul',
+  'Asia/Dubai', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok',
+  'Asia/Singapore', 'Asia/Tokyo', 'Asia/Seoul',
+  'Australia/Sydney', 'Australia/Melbourne', 'Pacific/Auckland',
 ]
 
-// Poll until window.shopify.idToken is available (App Bridge CDN script loaded)
-function useAppBridgeReady(): boolean {
-  const [ready, setReady] = useState(false)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const id = setInterval(() => {
-      const s = window.shopify as { idToken?: () => Promise<string> } | undefined
-      if (typeof s?.idToken === 'function') {
-        setReady(true)
-        clearInterval(id)
-      }
-    }, 100)
-    return () => clearInterval(id)
-  }, [])
-  return ready
+// Read id_token from the URL — Shopify puts a fresh JWT here on every page load.
+// It expires in 60s. App Bridge's idToken() gives unlimited fresh tokens if available.
+function getUrlToken(): string {
+  if (typeof window === 'undefined') return ''
+  return new URLSearchParams(window.location.search).get('id_token') ?? ''
 }
 
-async function freshToken(): Promise<string> {
-  return (window.shopify as { idToken: () => Promise<string> }).idToken()
+function parseTokenIat(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.iat ?? 0
+  } catch {
+    return 0
+  }
 }
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const token = await freshToken()
+async function getBestToken(urlToken: string): Promise<string> {
+  const s = window.shopify as { idToken?: () => Promise<string> } | undefined
+  if (typeof s?.idToken === 'function') {
+    try { return await s.idToken() } catch { /* fall through */ }
+  }
+  return urlToken
+}
+
+async function apiFetch(urlToken: string, path: string, options: RequestInit = {}) {
+  const token = await getBestToken(urlToken)
   return fetch(path, {
     ...options,
     headers: {
@@ -99,7 +83,10 @@ async function apiFetch(path: string, options: RequestInit = {}) {
 }
 
 export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken: string }) {
-  const appBridgeReady = useAppBridgeReady()
+  // URL token — valid for 60s from page load, available immediately
+  const [urlToken] = useState(getUrlToken)
+  const tokenIat = useRef(parseTokenIat(urlToken))
+
   const [storeState, setStoreState] = useState<StoreState | null>(null)
   const [lastToggle, setLastToggle] = useState<string | null>(null)
   const [windows, setWindows] = useState<ScheduleWindow[]>([])
@@ -107,11 +94,21 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
   const [toggling, setToggling] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null)
+
+  // Check if the URL token has aged past 55 seconds (approaching 60s expiry)
+  useEffect(() => {
+    if (!tokenIat.current) return
+    const msLeft = (tokenIat.current + 55) * 1000 - Date.now()
+    if (msLeft <= 0) { setSessionExpired(true); return }
+    const t = setTimeout(() => setSessionExpired(true), msLeft)
+    return () => clearTimeout(t)
+  }, [])
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/embedded/status')
+      const res = await apiFetch(urlToken, '/api/embedded/status')
       if (!res.ok) throw new Error('Failed to load status')
       const data = await res.json()
       setStoreState(data.state)
@@ -119,11 +116,11 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
     } catch {
       setToast({ message: 'Could not load store status', error: true })
     }
-  }, [])
+  }, [urlToken])
 
   const loadSchedule = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/embedded/schedule')
+      const res = await apiFetch(urlToken, '/api/embedded/schedule')
       if (!res.ok) throw new Error('Failed to load schedule')
       const data = await res.json()
       setWindows(data.windows ?? [])
@@ -131,18 +128,19 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
     } catch {
       setToast({ message: 'Could not load schedule', error: true })
     }
-  }, [])
+  }, [urlToken])
 
-  // Only fire API calls once App Bridge is confirmed ready — never use stale URL token
+  // Fire data load immediately — don't wait for App Bridge
   useEffect(() => {
-    if (!appBridgeReady) return
+    if (!urlToken) return
     Promise.all([loadStatus(), loadSchedule()]).finally(() => setLoading(false))
-  }, [appBridgeReady, loadStatus, loadSchedule])
+  }, [urlToken, loadStatus, loadSchedule])
 
   async function handleToggle(desired: StoreState) {
+    if (sessionExpired) { setToast({ message: 'Session expired — please refresh the page', error: true }); return }
     setToggling(true)
     try {
-      const res = await apiFetch('/api/embedded/toggle', {
+      const res = await apiFetch(urlToken, '/api/embedded/toggle', {
         method: 'POST',
         body: JSON.stringify({ desiredState: desired }),
       })
@@ -159,9 +157,10 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
   }
 
   async function handleSaveSchedule() {
+    if (sessionExpired) { setToast({ message: 'Session expired — please refresh the page', error: true }); return }
     setSaving(true)
     try {
-      const res = await apiFetch('/api/embedded/schedule', {
+      const res = await apiFetch(urlToken, '/api/embedded/schedule', {
         method: 'PUT',
         body: JSON.stringify({ windows, timezone }),
       })
@@ -180,12 +179,11 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
   }
 
   function addWindow() {
-    const nextDay = windows.length % 7
     setWindows((prev) => [
       ...prev,
       {
         id: `new-${Date.now()}`,
-        day_of_week: nextDay,
+        day_of_week: prev.length % 7,
         open_time: '09:00',
         close_time: '17:00',
         is_enabled: true,
@@ -198,8 +196,7 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
     setWindows((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Show spinner while waiting for App Bridge or data
-  if (!appBridgeReady || loading) {
+  if (!urlToken || loading) {
     return (
       <AppProvider i18n={en}>
         <Frame>
@@ -219,26 +216,28 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
     <AppProvider i18n={en}>
       <Frame>
         {toast && (
-          <Toast
-            content={toast.message}
-            error={toast.error}
-            onDismiss={() => setToast(null)}
-          />
+          <Toast content={toast.message} error={toast.error} onDismiss={() => setToast(null)} />
         )}
         <Page
           title="On/Off Automation"
           subtitle={`Automatically open and close your store on a schedule · ${shop}`}
         >
           <Layout>
+            {sessionExpired && (
+              <Layout.Section>
+                <Banner tone="warning">
+                  Your session has expired. Refresh the page to continue making changes.
+                </Banner>
+              </Layout.Section>
+            )}
+
             {/* Store Status */}
             <Layout.Section>
               <Card>
                 <BlockStack gap="400">
                   <Text as="h2" variant="headingMd">Store Status</Text>
                   <InlineStack gap="300" align="start" blockAlign="center">
-                    <Badge
-                      tone={storeState === 'open' ? 'success' : 'critical'}
-                    >
+                    <Badge tone={storeState === 'open' ? 'success' : 'critical'}>
                       {storeState === 'open' ? 'Open' : 'Closed'}
                     </Badge>
                     {lastToggle && (
@@ -257,7 +256,7 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
                       tone="success"
                       onClick={() => handleToggle('open')}
                       loading={toggling && storeState !== 'open'}
-                      disabled={toggling || storeState === 'open'}
+                      disabled={toggling || storeState === 'open' || sessionExpired}
                     >
                       Open Now
                     </Button>
@@ -266,7 +265,7 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
                       tone="critical"
                       onClick={() => handleToggle('closed')}
                       loading={toggling && storeState !== 'closed'}
-                      disabled={toggling || storeState === 'closed'}
+                      disabled={toggling || storeState === 'closed' || sessionExpired}
                     >
                       Close Now
                     </Button>
@@ -306,11 +305,7 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
                               checked={w.is_enabled}
                               onChange={(v) => updateWindow(i, 'is_enabled', v)}
                             />
-                            <Button
-                              variant="plain"
-                              tone="critical"
-                              onClick={() => removeWindow(i)}
-                            >
+                            <Button variant="plain" tone="critical" onClick={() => removeWindow(i)}>
                               Remove
                             </Button>
                           </InlineStack>
@@ -343,11 +338,7 @@ export function EmbeddedApp({ shop }: { shop: string; host: string; initialToken
 
                   <InlineStack align="space-between">
                     <Button onClick={addWindow}>Add Window</Button>
-                    <Button
-                      variant="primary"
-                      onClick={handleSaveSchedule}
-                      loading={saving}
-                    >
+                    <Button variant="primary" onClick={handleSaveSchedule} loading={saving} disabled={sessionExpired}>
                       Save Schedule
                     </Button>
                   </InlineStack>
