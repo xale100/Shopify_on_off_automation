@@ -130,31 +130,18 @@ export async function setStoreOpen(
   accessToken: string,
   open: boolean
 ): Promise<void> {
-  // onlineStorePreferencesUpdate is currently only in the unstable channel.
-  // passwordProtection.enabled: true → store closed (password required)
-  // passwordProtection.enabled: false → store open
+  // password_enabled: true → store closed (visitors see password page)
+  // password_enabled: false → store open
   const res = await fetch(
-    `https://${shop}/admin/api/unstable/graphql.json`,
+    `https://${shop}/admin/api/${API_VERSION}/shop.json`,
     {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'X-Shopify-Access-Token': accessToken,
       },
       body: JSON.stringify({
-        query: `
-          mutation onlineStorePreferencesUpdate($preferences: OnlineStorePreferencesInput!) {
-            onlineStorePreferencesUpdate(preferences: $preferences) {
-              userErrors { field message }
-              onlineStore { passwordProtection { enabled } }
-            }
-          }
-        `,
-        variables: {
-          preferences: {
-            passwordProtection: { enabled: !open },
-          },
-        },
+        shop: { password_enabled: !open },
       }),
     }
   )
@@ -162,25 +149,6 @@ export async function setStoreOpen(
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`Shopify toggle failed (${res.status}): ${body}`)
-  }
-
-  const json = await res.json()
-
-  // Top-level GraphQL errors (unknown mutation, auth failures, etc.)
-  if (json.errors?.length) {
-    const msg = json.errors.map((e: { message: string }) => e.message).join(', ')
-    throw new Error(`Shopify toggle failed: ${msg}`)
-  }
-
-  // Mutation-level userErrors
-  const userErrors = json.data?.onlineStorePreferencesUpdate?.userErrors ?? []
-  if (userErrors.length > 0) {
-    const msg = userErrors.map((e: { message: string }) => e.message).join(', ')
-    throw new Error(`Shopify toggle failed: ${msg}`)
-  }
-
-  if (!json.data?.onlineStorePreferencesUpdate) {
-    throw new Error(`Shopify toggle: mutation returned no data — check scope or API version`)
   }
 }
 
