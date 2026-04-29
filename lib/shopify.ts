@@ -166,10 +166,22 @@ export async function setStoreOpen(
   }
 
   const json = await res.json()
+
+  // Top-level GraphQL errors (unknown mutation, auth failures, etc.)
+  if (json.errors?.length) {
+    const msg = json.errors.map((e: { message: string }) => e.message).join(', ')
+    throw new Error(`Shopify toggle failed: ${msg}`)
+  }
+
+  // Mutation-level userErrors
   const userErrors = json.data?.onlineStorePreferencesUpdate?.userErrors ?? []
   if (userErrors.length > 0) {
     const msg = userErrors.map((e: { message: string }) => e.message).join(', ')
     throw new Error(`Shopify toggle failed: ${msg}`)
+  }
+
+  if (!json.data?.onlineStorePreferencesUpdate) {
+    throw new Error(`Shopify toggle: mutation returned no data — check scope or API version`)
   }
 }
 
