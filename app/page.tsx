@@ -1,7 +1,38 @@
 import type { Metadata } from 'next'
+import ShowsCalendar, { type Show } from '@/components/ShowsCalendar'
 
 export const metadata: Metadata = {
   title: 'Shopify On/Off Automation — Auto-schedule your store',
+}
+
+async function fetchInitialShows(slug: string): Promise<{
+  shows: Show[]
+  timezone: string
+  notFound: boolean
+}> {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const from = `${year}-${String(month + 1).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+  try {
+    const res = await fetch(
+      `https://getvenueflow.app/api/public/venues/${slug}/shows?from=${from}&to=${to}&limit=100`,
+      { next: { revalidate: 300 } },
+    )
+    if (res.status === 404) return { shows: [], timezone: 'UTC', notFound: true }
+    if (!res.ok) return { shows: [], timezone: 'UTC', notFound: false }
+    const data = await res.json()
+    return {
+      shows: data.shows ?? [],
+      timezone: data.venue?.timezone ?? 'UTC',
+      notFound: false,
+    }
+  } catch {
+    return { shows: [], timezone: 'UTC', notFound: false }
+  }
 }
 
 export default async function LandingPage({
@@ -12,9 +43,15 @@ export default async function LandingPage({
   const params = await searchParams
   const billingDeclined = params.billing === 'declined'
 
+  const slug = process.env.VENUEFLOW_SLUG ?? 'haha'
+  const now = new Date()
+  const initialYear = now.getFullYear()
+  const initialMonth = now.getMonth()
+  const { shows, timezone } = await fetchInitialShows(slug)
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col items-center justify-center px-4">
-      <div className="max-w-lg w-full text-center">
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 py-16 px-4">
+      <div className="max-w-lg mx-auto text-center">
         <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-green-500/20 ring-1 ring-green-500/30">
           <svg className="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -77,11 +114,23 @@ export default async function LandingPage({
             $4.99/month flat — no usage fees
           </li>
         </ul>
+      </div>
 
-        <div className="mt-10 flex justify-center gap-6 text-xs text-slate-500">
-          <a href="/privacy" className="hover:text-slate-300">Privacy Policy</a>
-          <a href="/support" className="hover:text-slate-300">Support</a>
-        </div>
+      {/* Shows calendar */}
+      <div className="max-w-4xl mx-auto mt-16">
+        <h2 className="text-white font-semibold text-xl mb-4 text-center">Upcoming Shows</h2>
+        <ShowsCalendar
+          slug={slug}
+          initialShows={shows}
+          initialYear={initialYear}
+          initialMonth={initialMonth}
+          timezone={timezone}
+        />
+      </div>
+
+      <div className="mt-10 flex justify-center gap-6 text-xs text-slate-500">
+        <a href="/privacy" className="hover:text-slate-300">Privacy Policy</a>
+        <a href="/support" className="hover:text-slate-300">Support</a>
       </div>
     </main>
   )
