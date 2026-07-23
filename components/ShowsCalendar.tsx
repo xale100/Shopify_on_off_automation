@@ -254,7 +254,14 @@ export default function ShowsCalendar({
           {selectedShow && (
             <div className="border-t border-slate-700 px-5 py-4 bg-slate-700/30">
               <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
+                {selectedShow.photoUrl && (
+                  <img
+                    src={selectedShow.photoUrl}
+                    alt={selectedShow.title}
+                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
                   <p className="text-white font-semibold truncate">{selectedShow.title}</p>
                   <p className="text-slate-400 text-sm mt-0.5">
                     {selectedShow.date}
