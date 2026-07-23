@@ -262,8 +262,7 @@ export default function ShowsCalendar({
                 />
               )}
               <div className="px-5 py-4">
-              <p className="text-xs text-slate-500 mb-2 break-all">photoUrl: {selectedShow.photoUrl ?? 'null'}</p>
-              <div className="flex items-start justify-between gap-4">
+<div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <p className="text-white font-semibold truncate">{selectedShow.title}</p>
                   <p className="text-slate-400 text-sm mt-0.5">
