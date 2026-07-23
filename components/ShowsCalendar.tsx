@@ -252,15 +252,17 @@ export default function ShowsCalendar({
 
           {/* Selected show detail */}
           {selectedShow && (
-            <div className="border-t border-slate-700 px-5 py-4 bg-slate-700/30">
+            <div className="border-t border-slate-700 bg-slate-700/30">
+              {selectedShow.photoUrl && (
+                <img
+                  src={selectedShow.photoUrl}
+                  alt={selectedShow.title}
+                  className="w-full h-48 object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              )}
+              <div className="px-5 py-4">
               <div className="flex items-start justify-between gap-4">
-                {selectedShow.photoUrl && (
-                  <img
-                    src={selectedShow.photoUrl}
-                    alt={selectedShow.title}
-                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-                  />
-                )}
                 <div className="min-w-0 flex-1">
                   <p className="text-white font-semibold truncate">{selectedShow.title}</p>
                   <p className="text-slate-400 text-sm mt-0.5">
@@ -301,6 +303,7 @@ export default function ShowsCalendar({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
+              </div>
               </div>
             </div>
           )}
