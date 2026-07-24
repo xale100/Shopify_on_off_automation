@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+export interface LineupAct {
+  artistName: string
+  startTime: string | null
+  endTime: string | null
+  stage: string | null
+}
+
 export interface Show {
   id: string
   date: string
@@ -13,6 +20,7 @@ export interface Show {
   coverCharge: string | null
   photoUrl: string | null
   stageName: string | null
+  lineup?: LineupAct[]
 }
 
 interface Props {
@@ -60,6 +68,7 @@ export default function ShowsCalendar({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedShow, setSelectedShow] = useState<Show | null>(null)
+  const [lineupOpen, setLineupOpen] = useState(true)
   const isFirstRender = useRef(true)
 
   useEffect(() => {
@@ -71,6 +80,7 @@ export default function ShowsCalendar({
     setLoading(true)
     setError(null)
     setSelectedShow(null)
+    setLineupOpen(true)
     const from = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayOfMonth(year, month)).padStart(2, '0')}`
     fetch(
@@ -293,6 +303,37 @@ export default function ShowsCalendar({
                       </span>
                     )}
                   </div>
+                  {selectedShow.lineup && selectedShow.lineup.length > 0 && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => setLineupOpen((o) => !o)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+                      >
+                        <svg
+                          className={`w-3 h-3 transition-transform ${lineupOpen ? 'rotate-90' : ''}`}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Lineup · {selectedShow.lineup.length} {selectedShow.lineup.length === 1 ? 'act' : 'acts'}
+                      </button>
+                      {lineupOpen && (
+                        <ul className="mt-2 space-y-1">
+                          {selectedShow.lineup.map((act, i) => (
+                            <li key={i} className="flex items-baseline justify-between gap-3 py-1 border-b border-slate-700/50 last:border-0">
+                              <span className="text-sm text-white truncate">{act.artistName}</span>
+                              <span className="flex-shrink-0 text-xs text-slate-500 tabular-nums">
+                                {act.startTime ? formatTime(act.startTime) : ''}
+                                {act.startTime && act.endTime ? ` – ${formatTime(act.endTime)}` : ''}
+                                {!act.startTime && !act.endTime ? 'TBA' : ''}
+                                {act.stage ? ` · ${act.stage}` : ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => setSelectedShow(null)}
