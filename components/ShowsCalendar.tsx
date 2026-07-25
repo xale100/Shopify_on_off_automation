@@ -84,7 +84,7 @@ export default function ShowsCalendar({
     const from = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayOfMonth(year, month)).padStart(2, '0')}`
     fetch(
-      `https://getvenueflow.app/api/public/venues/${slug}/shows?from=${from}&to=${to}&limit=100`,
+      `/api/shows?slug=${encodeURIComponent(slug)}&from=${from}&to=${to}&limit=100`,
     )
       .then(async (res) => {
         if (!res.ok) {
