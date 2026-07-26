@@ -4,9 +4,9 @@ import { useEffect, useRef } from 'react'
 
 const SLUG = process.env.NEXT_PUBLIC_VENUEFLOW_SLUG ?? 'haha'
 
-// accent = blue-600, bg = transparent so it sits on the dark slate ground
+// accent = blue-600, bg = transparent, scheme=dark fallback if script is stripped
 const IFRAME_SRC =
-  `https://getvenueflow.app/embed/${SLUG}/form?accent=%232563eb&bg=transparent&font=sans`
+  `https://getvenueflow.app/embed/${SLUG}/form?accent=%232563eb&bg=transparent&font=sans&scheme=dark`
 
 export default function BookingForm() {
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -14,9 +14,32 @@ export default function BookingForm() {
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       if (e.origin !== 'https://getvenueflow.app') return
-      if (!e.data || e.data.type !== 'venueflow:height') return
-      if (iframeRef.current) {
-        iframeRef.current.style.height = `${e.data.height}px`
+      if (!e.data) return
+
+      if (e.data.type === 'venueflow:height') {
+        if (iframeRef.current) {
+          iframeRef.current.style.height = `${e.data.height}px`
+        }
+      }
+
+      if (e.data.type === 'venueflow:surface-request') {
+        let el = iframeRef.current?.parentElement
+        while (el) {
+          const st = getComputedStyle(el)
+          const grad = st.backgroundImage.match(/rgba?\([^)]+\)/)
+          const parts = (grad ? grad[0] : st.backgroundColor).match(/[\d.]+/g)
+          if (parts && (parts[3] === undefined || +parts[3] > 0)) {
+            const hex = '#' + parts.slice(0, 3)
+              .map((n) => (+n).toString(16).padStart(2, '0'))
+              .join('')
+            iframeRef.current?.contentWindow?.postMessage(
+              { type: 'venueflow:surface', color: hex },
+              'https://getvenueflow.app',
+            )
+            return
+          }
+          el = el.parentElement
+        }
       }
     }
     window.addEventListener('message', onMessage)
