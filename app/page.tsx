@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import ShowsCalendar, { type Show } from '@/components/ShowsCalendar'
+import VenueWidget from '@/components/VenueWidget'
 import BookingForm from '@/components/BookingForm'
 
 export const metadata: Metadata = {
@@ -54,6 +55,12 @@ export default async function LandingPage() {
             initialMonth={initialMonth}
             timezone={timezone}
           />
+        </section>
+
+        {/* Widget calendar (for comparison with custom calendar above) */}
+        <section>
+          <h2 className="text-white font-semibold text-xl mb-4">Upcoming Shows — Widget</h2>
+          <VenueWidget />
         </section>
 
         {/* Booking request form */}
