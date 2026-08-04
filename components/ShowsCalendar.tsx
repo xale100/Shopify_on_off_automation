@@ -16,6 +16,8 @@ export interface Show {
   endTime: string | null
   title: string
   type: string
+  status: 'confirmed' | 'cancelled'
+  cancellationReason: string | null
   genre: string | null
   coverCharge: string | null
   photoUrl: string | null
@@ -229,25 +231,33 @@ export default function ShowsCalendar({
                       {cell.day}
                     </span>
                   )}
-                  {cellShows.map((show) => (
-                    <button
-                      key={show.id}
-                      onClick={() =>
-                        setSelectedShow((prev) => (prev?.id === show.id ? null : show))
-                      }
-                      className={[
-                        'w-full text-left px-1.5 py-0.5 rounded text-xs leading-snug truncate transition-colors',
-                        selectedShow?.id === show.id
-                          ? 'bg-green-500/40 text-green-200'
-                          : 'bg-green-500/20 text-green-300 hover:bg-green-500/30',
-                      ].join(' ')}
-                    >
-                      {show.title}
-                      {show.startTime && (
-                        <span className="ml-1 opacity-70">{formatTime(show.startTime)}</span>
-                      )}
-                    </button>
-                  ))}
+                  {cellShows.map((show) => {
+                    const isCancelled = show.status === 'cancelled'
+                    const isSelected = selectedShow?.id === show.id
+                    return (
+                      <button
+                        key={show.id}
+                        onClick={() =>
+                          setSelectedShow((prev) => (prev?.id === show.id ? null : show))
+                        }
+                        className={[
+                          'w-full text-left px-1.5 py-0.5 rounded text-xs leading-snug truncate transition-colors',
+                          isCancelled
+                            ? isSelected
+                              ? 'bg-slate-600/60 text-slate-400'
+                              : 'bg-slate-600/30 text-slate-500 hover:bg-slate-600/50'
+                            : isSelected
+                              ? 'bg-green-500/40 text-green-200'
+                              : 'bg-green-500/20 text-green-300 hover:bg-green-500/30',
+                        ].join(' ')}
+                      >
+                        <span className={isCancelled ? 'line-through' : ''}>{show.title}</span>
+                        {show.startTime && (
+                          <span className="ml-1 opacity-70">{formatTime(show.startTime)}</span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               )
             })}
@@ -274,7 +284,20 @@ export default function ShowsCalendar({
               <div className="px-5 py-4">
 <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="text-white font-semibold truncate">{selectedShow.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={[
+                      'font-semibold truncate',
+                      selectedShow.status === 'cancelled' ? 'line-through text-slate-400' : 'text-white',
+                    ].join(' ')}>{selectedShow.title}</p>
+                    {selectedShow.status === 'cancelled' && (
+                      <span className="flex-shrink-0 text-xs font-bold uppercase tracking-wide text-red-400 bg-red-500/10 border border-red-500/20 rounded px-1.5 py-0.5">
+                        Cancelled
+                      </span>
+                    )}
+                  </div>
+                  {selectedShow.status === 'cancelled' && selectedShow.cancellationReason && (
+                    <p className="text-slate-400 text-sm mt-1">{selectedShow.cancellationReason}</p>
+                  )}
                   <p className="text-slate-400 text-sm mt-0.5">
                     {selectedShow.date}
                     {selectedShow.startTime && (
