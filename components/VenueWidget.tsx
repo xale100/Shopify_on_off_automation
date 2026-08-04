@@ -7,7 +7,7 @@ const SLUG = process.env.NEXT_PUBLIC_VENUEFLOW_SLUG ?? 'haha'
 export default function VenueWidget() {
   return (
     <>
-      <div id="venueflow-widget" />
+      <div id="venueflow-widget" style={{ color: '#dde6f0' }} />
       <Script
         src="https://getvenueflow.app/widget.js"
         data-venue={SLUG}
